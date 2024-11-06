@@ -1,31 +1,50 @@
-import matplotlib.pyplot as plt
+import argparse
+
 import numpy as np
+import scipy.io as sio
 import pandas as pd
 import torch
+
 from chronos import ChronosPipeline
 
-pipeline = ChronosPipeline.from_pretrained(
-  "amazon/chronos-t5-tiny",
-  device_map="cuda",
-  torch_dtype=torch.bfloat16,
-)
+import matplotlib.pyplot as plt
 
-df = pd.read_csv("https://raw.githubusercontent.com/AileenNielsen/TimeSeriesAnalysisWithPython/master/data/AirPassengers.csv")
+# Command line argument for model selection
+# 'tiny' has 8M parameters
+# 'mini' has 20M parameters
+# 'small' has 46M parameters
+# 'base' has 200M parameters
+# 'large' has 710M parameters
+parser = argparse.ArgumentParser()
+parser.add_argument('--model', type=str, default='tiny')
+args = parser.parse_args()
 
-# context must be either a 1D tensor, a list of 1D tensors,
-# or a left-padded 2D tensor with batch as the first dimension
-context = torch.tensor(df["#Passengers"])
+# Set model name
+model = 'amazon/chronos-t5-' + args.model
+
+# Use 'mps' for Apple Silicon, 'cpu' for CPU inference or 'cuda' if GPU is available
+device = 'mps'
+# device = 'cpu'
+if torch.cuda.is_available():
+  device = 'cuda'
+
+# Define model
+pipeline = ChronosPipeline.from_pretrained(model, device_map=device, torch_dtype=torch.bfloat16)
+
+# Load the data
+data_mat = sio.loadmat('data.mat')
+dataR = pd.DataFrame(data_mat['Resistance']) # convert the data to pandas dataframe
+
+# Make predictions
+context = torch.tensor(data['Resistance']) # context must be either a 1D tensor, a list of 1D tensors or
+                                           # a left-padded 2D tensor with batch as the first dimension
 prediction_length = 12
 forecast = pipeline.predict(context, prediction_length)  # shape [num_series, num_samples, prediction_length]
 
-# visualize the forecast
-forecast_index = range(len(df), len(df) + prediction_length)
-low, median, high = np.quantile(forecast[0].numpy(), [0.1, 0.5, 0.9], axis=0)
-
-plt.figure(figsize=(8, 4))
-plt.plot(df["#Passengers"], color="royalblue", label="historical data")
-plt.plot(forecast_index, median, color="tomato", label="median forecast")
-plt.fill_between(forecast_index, low, high, color="tomato", alpha=0.3, label="80% prediction interval")
+# Visualize the results
+plt.figure()
+plt.plot(data['Resistance'], color='blue', label='Resistance From Data')
+plt.plot(R_pred, color='red', label='Predicted Resistance')
 plt.legend()
 plt.grid()
 plt.show()
